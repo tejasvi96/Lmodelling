@@ -37,6 +37,7 @@ pretrained_model_name=""
 load_model=0
 load_model_file=""
 device=""
+val_factor=0.1
 class BiLMEncoder(ElmoLstm):
     """Wrapper around BiLM to give it an interface to comply with SentEncoder
     See base class: ElmoLstm
@@ -51,7 +52,7 @@ class BiLMEncoder(ElmoLstm):
 @hydra.main(config_path="config.yaml")
 def configsetters(cfg):
     print(cfg.pretty())
-    global max_seq_len,batch_size,files_dir,train_file,test_file,val_file,hid_size,vocab_size,epochs,learning_rate,pretrained_model_name,xlm,run_name,load_model,load_model_file
+    global max_seq_len,batch_size,files_dir,train_file,test_file,val_file,hid_size,vocab_size,epochs,learning_rate,pretrained_model_name,xlm,run_name,load_model,load_model_file,val_factor
 
     max_seq_len=cfg.main.max_seq_len
     batch_size=cfg.main.batch_size
@@ -67,15 +68,23 @@ def configsetters(cfg):
     run_name=cfg.main.run_name
     load_model=cfg.main.load_model
     load_model_file=cfg.main.load_model_file
+    val_factor=cfg.main.val_factor
+
     global train_sents,test_sents,val_sents
+
     train_loaded_file=files_dir+train_file+"_preprocessed.pt"
     test_loaded_file=files_dir+test_file+"_preprocessed.pt"
     val_loaded_file=files_dir+val_file+"_preprocessed.pt"
 
     if cfg.main.preprocessed==1:
+        logging.info("Loading the existing data files ")
         train_sents=torch.load(train_loaded_file)
         test_sents=torch.load(test_loaded_file)
         val_sents=torch.load(val_loaded_file)
+        vocab_file=files_dir+run_name+"_vocab_"+train_file
+        with open(vocab_file,'r',encoding="utf-8") as fp:
+            data=fp.readlines()
+            vocab_size=int(data[0].split("\n")[0])
     else:
         preprocess()
 
@@ -116,7 +125,6 @@ def preprocess():
         with open(filepath,'r',encoding='utf-8') as fp:
             data=fp.read()
         sents=data.split("\n")
-        sents=sents[:200]
 
         tokenized_sents=[i for i in range(len(sents))]
         # Do this only for the train file
@@ -135,7 +143,20 @@ def preprocess():
             token_inds=sorted(token_inds)
             for i,key in enumerate(token_inds):
                 restricted_vocab[key]=i
+
+            # Hyperpprameter is setup    
             vocab_size=len(restricted_vocab)
+            vocab_file=files_dir+run_name+"_vocab_"+train_file
+            with open(vocab_file,'w',encoding="utf-8") as fp:
+                fp.write(str(len(restricted_vocab)))
+                fp.write("\n")
+                kys=list(restricted_vocab.keys())
+                vals=tokenizer.convert_ids_to_tokens(kys)
+                for k in vals:
+                    fp.write(k+"\n")
+
+    
+            # with open("")
             # print(restricted_vocab)
         for i,sent in enumerate(sents):
             tokenized_sents[i]=tokenizer.encode(sent)
@@ -265,13 +286,13 @@ def mod():
     writer = SummaryWriter()
 
     net.train()
-    opt=optim.Adam(net.parameters(),lr=learning_rate)
+    opt=optim.Adam(net.parameters(),lr=learning_rate,weight_decay=1e-4)
     global criterion
     criterion=nn.CrossEntropyLoss(ignore_index=2)
     logging.info("Started Training")
     # print("Started Training")
     for epc in range(epochs):
-        trainloader=DataLoader(train_sents,batch_size=64)
+        trainloader=DataLoader(train_sents,batch_size=batch_size)
         n_totals=0
         n_loss=0
         min_val_loss=100
@@ -342,12 +363,13 @@ def val_func():
     n_loss=0
     # Can modify to do on a restricted set of the sentences
     global val_sents,net
-    n=int(len(val_sents)*0.1)
+    global val_factor
+    n=int(len(val_sents)*val_factor)
 
     # print(val_sents)
     valloader=DataLoader(val_sents,batch_size=batch_size,shuffle=True)
     with torch.no_grad():
-        for batch_idx,(inp,fwd,bwd,lt) in enumerate(itertools.islice(valloader,int(n))):
+        for batch_idx,(inp,fwd,bwd,lt) in enumerate(itertools.islice(valloader,int(n/batch_size))):
 
             inp=inp.to(device)
             bwd=bwd.to(device)
@@ -395,5 +417,4 @@ def test_func():
 if __name__=="__main__":
     
     configsetters()
-    preprocess()
     mod()
