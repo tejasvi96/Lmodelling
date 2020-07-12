@@ -1,4 +1,5 @@
 import logging
+import itertools
 for handler in logging.root.handlers[:]:
     logging.root.removeHandler(handler)
 logging.basicConfig(filename='run.log',format='%(asctime)s %(message)s',filemode='a',level=logging.INFO)
@@ -36,6 +37,7 @@ pretrained_model_name=""
 load_model=0
 load_model_file=""
 device=""
+val_factor=0.1
 class BiLMEncoder(ElmoLstm):
     """Wrapper around BiLM to give it an interface to comply with SentEncoder
     See base class: ElmoLstm
@@ -48,12 +50,9 @@ class BiLMEncoder(ElmoLstm):
         return self.hidden_size * 2
 
 @hydra.main(config_path="config.yaml")
-def preprocess(cfg):
-    
-    cwd=os.getcwd()+"/"
-    txtfiles=[]
+def configsetters(cfg):
     print(cfg.pretty())
-    global max_seq_len,batch_size,files_dir,train_file,test_file,val_file,hid_size,vocab_size,epochs,learning_rate,pretrained_model_name,xlm,run_name,load_model,load_model_file
+    global max_seq_len,batch_size,files_dir,train_file,test_file,val_file,hid_size,vocab_size,epochs,learning_rate,pretrained_model_name,xlm,run_name,load_model,load_model_file,val_factor
 
     max_seq_len=cfg.main.max_seq_len
     batch_size=cfg.main.batch_size
@@ -69,6 +68,46 @@ def preprocess(cfg):
     run_name=cfg.main.run_name
     load_model=cfg.main.load_model
     load_model_file=cfg.main.load_model_file
+    val_factor=cfg.main.val_factor
+
+    global train_sents,test_sents,val_sents
+
+    train_loaded_file=files_dir+train_file+"_preprocessed.pt"
+    test_loaded_file=files_dir+test_file+"_preprocessed.pt"
+    val_loaded_file=files_dir+val_file+"_preprocessed.pt"
+
+    if cfg.main.preprocessed==1:
+        logging.info("Loading the existing data files ")
+        train_sents=torch.load(train_loaded_file)
+        test_sents=torch.load(test_loaded_file)
+        val_sents=torch.load(val_loaded_file)
+        vocab_file=files_dir+run_name+"_vocab_"+train_file
+        with open(vocab_file,'r',encoding="utf-8") as fp:
+            data=fp.readlines()
+            vocab_size=int(data[0].split("\n")[0])
+    else:
+        preprocess()
+
+def preprocess():
+    
+    cwd=os.getcwd()+"/"
+    txtfiles=[]
+    global max_seq_len,batch_size,files_dir,train_file,test_file,val_file,hid_size,vocab_size,epochs,learning_rate,pretrained_model_name,xlm,run_name,load_model,load_model_file
+
+    # max_seq_len=cfg.main.max_seq_len
+    # batch_size=cfg.main.batch_size
+    # files_dir=cfg.main.files_dir
+    # train_file=cfg.main.train_file
+    # test_file=cfg.main.test_file
+    # val_file=cfg.main.val_file
+    # hid_size=cfg.main.hid_size
+    # vocab_size=cfg.main.vocab_size
+    # epochs=cfg.main.epochs
+    # learning_rate=cfg.main.learning_rate
+    # pretrained_model_name=cfg.main.pretrained_model
+    # run_name=cfg.main.run_name
+    # load_model=cfg.main.load_model
+    # load_model_file=cfg.main.load_model_file
 
     # Loading the pretrianined XLM model 
 
@@ -87,7 +126,6 @@ def preprocess(cfg):
             data=fp.read()
         sents=data.split("\n")
 
-
         tokenized_sents=[i for i in range(len(sents))]
         # Do this only for the train file
         if ind==0:
@@ -105,7 +143,20 @@ def preprocess(cfg):
             token_inds=sorted(token_inds)
             for i,key in enumerate(token_inds):
                 restricted_vocab[key]=i
+
+            # Hyperpprameter is setup    
             vocab_size=len(restricted_vocab)
+            vocab_file=files_dir+run_name+"_vocab_"+train_file
+            with open(vocab_file,'w',encoding="utf-8") as fp:
+                fp.write(str(len(restricted_vocab)))
+                fp.write("\n")
+                kys=list(restricted_vocab.keys())
+                vals=tokenizer.convert_ids_to_tokens(kys)
+                for k in vals:
+                    fp.write(k+"\n")
+
+    
+            # with open("")
             # print(restricted_vocab)
         for i,sent in enumerate(sents):
             tokenized_sents[i]=tokenizer.encode(sent)
@@ -125,8 +176,8 @@ def preprocess(cfg):
         for i,sent in enumerate(tokenized_sents):
         #     print(len(sent))
         #     Added +2 to accomodate for the start and ending token
+            # input_sent_lens.append(len(sent))
             input_sent_lens.append(len(sent) if len(sent)<max_seq_len else max_seq_len)
-
 
     #     max_seq_len=max(input_sent_lens)
         # print(max_seq_len)
@@ -158,15 +209,23 @@ def preprocess(cfg):
         arr_retokenized_sents=np.array(arr_retokenized_sents,dtype=int)
         arr_sents=TensorDataset(torch.from_numpy(arr_tokenized_sents),torch.from_numpy(arr_retokenized_sents),torch.from_numpy(arr_backward_sents),torch.from_numpy(input_sent_lens))
     #     Hyperpprameter
-        batch_size=cfg.main.batch_size
+        # batch_size=cfg.main.batch_size
+
+        train_loaded_file=files_dir+train_file+"_preprocessed.pt"
+        test_loaded_file=files_dir+test_file+"_preprocessed.pt"
+        val_loaded_file=files_dir+val_file+"_preprocessed.pt"
+
         if ind==0:
             train_sents=arr_sents
+            torch.save(train_sents,train_loaded_file)
             trainloader=DataLoader(arr_sents,batch_size=batch_size,shuffle=True)
         elif ind==1:
             test_sents=arr_sents
+            torch.save(test_sents,test_loaded_file)
             testloader=DataLoader(arr_sents,batch_size=batch_size,shuffle=True)
         else:
             val_sents=arr_sents
+            torch.save(val_sents,val_loaded_file)
             valloader=DataLoader(arr_sents,batch_size=batch_size,shuffle=True)
 
 
@@ -179,11 +238,13 @@ class Model(nn.Module):
         self.lin=torch.nn.Linear(options['hid_size'],vocab_size)
     def forward(self,enc_embedding,lt):
 #         print(enc_embedding[0].shape)
+        # mask=torch.zeros((lt.shape[0],max_seq_len))
+        # for j,l in enumerate(lt):
+        #     mask[j,:l]=torch.ones(l) 
         mask=torch.zeros((lt.shape[0],max_seq_len)).to(device)
         for j,l in enumerate(lt):
             for k in range(l):
                 mask[j,k]=1
-#        mask=mask.to(device)
         enc=self.bilm(enc_embedding[0],mask)
         
         fwd,bwd=enc[:,:,:,:hid_size],enc[:,:,:,hid_size:]
@@ -235,7 +296,7 @@ def mod():
     logging.info("Started Training")
     # print("Started Training")
     for epc in range(epochs):
-        trainloader=DataLoader(train_sents,batch_size=64)
+        trainloader=DataLoader(train_sents,batch_size=batch_size)
         n_totals=0
         n_loss=0
         min_val_loss=100
@@ -305,14 +366,14 @@ def val_func():
     n_total=0
     n_loss=0
     # Can modify to do on a restricted set of the sentences
-    val_factor=0.2
-    global val_sents
+    global val_sents,net
+    global val_factor
     n=int(len(val_sents)*val_factor)
-    perm=np.random.permutation(len(val_sents))
-    val_sents=val_sents[perm]
-    valloader=DataLoader(val_sents[:n],batch_size=batch_size,shuffle=True)
+
+    # print(val_sents)
+    valloader=DataLoader(val_sents,batch_size=batch_size,shuffle=True)
     with torch.no_grad():
-        for batch_idx,(inp,fwd,bwd,lt) in enumerate(valloader):
+        for batch_idx,(inp,fwd,bwd,lt) in enumerate(itertools.islice(valloader,int(n/batch_size))):
 
             inp=inp.to(device)
             bwd=bwd.to(device)
@@ -358,6 +419,6 @@ def test_func():
     # print(" Test Loss",str(avg_loss),"Test Perplexity ",str(math.exp(avg_loss)))
 
 if __name__=="__main__":
-
-    preprocess()
+    
+    configsetters()
     mod()
