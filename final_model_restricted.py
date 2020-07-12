@@ -1,8 +1,8 @@
-import logging
+# import logging
+from loguru import logger
+logger.add("myfile.log")
+logger.info("Started Logging")
 import itertools
-for handler in logging.root.handlers[:]:
-    logging.root.removeHandler(handler)
-logging.basicConfig(filename='run.log',format='%(asctime)s %(message)s',filemode='a',level=logging.INFO)
 # logger = logging.logging("logs")  # get the root logging
 import hydra
 import torch
@@ -77,19 +77,23 @@ def configsetters(cfg):
     val_loaded_file=files_dir+val_file+"_preprocessed.pt"
 
     if cfg.main.preprocessed==1:
-        logging.info("Loading the existing data files ")
+        # Todo 
+        # When loading the sequence length must also be same as that at run time
+
+        logger.info("Loading the existing data files ")
         train_sents=torch.load(train_loaded_file)
         test_sents=torch.load(test_loaded_file)
         val_sents=torch.load(val_loaded_file)
         vocab_file=files_dir+run_name+"_vocab_"+train_file
+        # overriding the sequence length and vocabsize parameter
         with open(vocab_file,'r',encoding="utf-8") as fp:
             data=fp.readlines()
             vocab_size=int(data[0].split("\n")[0])
+            max_seq_len=int(data[1].split("\n")[0])
     else:
         preprocess()
 
 def preprocess():
-    
     cwd=os.getcwd()+"/"
     txtfiles=[]
     global max_seq_len,batch_size,files_dir,train_file,test_file,val_file,hid_size,vocab_size,epochs,learning_rate,pretrained_model_name,xlm,run_name,load_model,load_model_file
@@ -148,7 +152,8 @@ def preprocess():
             vocab_size=len(restricted_vocab)
             vocab_file=files_dir+run_name+"_vocab_"+train_file
             with open(vocab_file,'w',encoding="utf-8") as fp:
-                fp.write(str(len(restricted_vocab)))
+                fp.write(str(len(restricted_vocab))+"\n")
+                fp.write(str(max_seq_len))
                 fp.write("\n")
                 kys=list(restricted_vocab.keys())
                 vals=tokenizer.convert_ids_to_tokens(kys)
@@ -232,7 +237,7 @@ def preprocess():
 class Model(nn.Module):
     def __init__(self,options):
         super(Model, self).__init__()
-        logging.info(options)
+        logger.info(options)
         # print(options)
         self.bilm=BiLMEncoder(options['hid_size'],options['hid_size'],options['hid_size'],1)
         self.lin=torch.nn.Linear(options['hid_size'],vocab_size)
@@ -274,16 +279,16 @@ def mod():
     #add the support of the Loading existing model and existing optimizer
     #  
     xlm=XLMModel.from_pretrained(pretrained_model_name)
-    logging.info("Successfully loaded the XLM model")
+    logger.info("Successfully loaded the XLM model")
     xlm=xlm.to(device)
     net=Model(options)
     net=net.to(device)
     if load_model==1:
         net.load_state_dict(torch.load(files_dir+load_model_file))
-        logging.info("Model successfully Loaded")
-    logging.info("Trainable Parameters")
+        logger.info("Model successfully Loaded")
+    logger.info("Trainable Parameters")
     # print("Trainable Params")
-    logging.info(count_parameters(net))
+    logger.info(count_parameters(net))
     # print(count_parameters(net))
     print_model(net)
     
@@ -293,7 +298,7 @@ def mod():
     opt=optim.Adam(net.parameters(),lr=learning_rate,weight_decay=1e-4)
     global criterion
     criterion=nn.CrossEntropyLoss(ignore_index=2)
-    logging.info("Started Training")
+    logger.info("Started Training")
     # print("Started Training")
     for epc in range(epochs):
         trainloader=DataLoader(train_sents,batch_size=batch_size)
@@ -320,29 +325,31 @@ def mod():
             n_loss+=loss.item()
             n_totals+=lt.shape[0]
             opt.step()
+            if batch_idx %10000==0:
+                logger.info("After "+str(batch_idx+1)+" steps Training Avg_loss "+str(n_loss/(batch_idx+1))+"Training Avg_perplexity "+str(math.exp(n_loss/(batch_idx+1))))
             # print(loss.item())
         # print(batch_idx)
         avg_loss=n_loss/batch_idx
-        logging.info("Epoch "+str(epc))
+        logger.info("Epoch "+str(epc))
         
         # print("Epoch "+str(epc))
         # print("Training Avg_loss "+str(avg_loss)+"Training Avg_perplexity "+str(math.exp(avg_loss)))
         # print(math.exp(avg_loss))
         val_loss=val_func()
         if val_loss<min_val_loss:
-            logging.info("Saved the model state best validation loss ")
+            logger.info("Saved the model state best validation loss ")
             min_val_loss=val_loss
             model_path=files_dir+run_name+"_model_best.pt"
             optim_path=files_dir+run_name+"_optim_best.pth"
             torch.save(opt.state_dict,optim_path)
             torch.save(net.state_dict(),model_path)
         # print("Validation Avg_loss "+str(val_loss)+"Training Avg_perplexity "+str(math.exp(val_loss)))
-        logging.info("Training Avg_loss "+str(avg_loss)+"Training Avg_perplexity "+str(math.exp(avg_loss))+" "+ "Validation Avg_loss "+str(val_loss)+"Training Avg_perplexity "+str(math.exp(val_loss)))
+        logger.info("Training Avg_loss "+str(avg_loss)+"Training Avg_perplexity "+str(math.exp(avg_loss))+" "+ "Validation Avg_loss "+str(val_loss)+"Training Avg_perplexity "+str(math.exp(val_loss)))
         writer.add_scalar("Perplexity/Val",math.exp(val_loss),epc)
         writer.add_scalar('Perplexity/Train',math.exp(avg_loss), epc)
         # Saving the state after 10 epochs 
         if epc %10==0:
-            logging.info("Saved the model state after 10 epochs")
+            logger.info("Saved the model state after 10 epochs")
             model_path=files_dir+run_name+"_model_"+str(epc)+".pt"
             optim_path=files_dir+run_name+"_optim_"+str(epc)+".pth"
             torch.save(opt.state_dict,optim_path)
@@ -356,8 +363,8 @@ def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 def print_model(model):
-    logging.info(xlm.parameters)
-    logging.info(model.parameters)
+    logger.info(xlm.parameters)
+    logger.info(model.parameters)
     # print(xlm.parameters)
     # print(model.parameters)
 
@@ -414,11 +421,11 @@ def test_func():
             loss=criterion(out,targs)
             n_loss+=(loss.item())
         avg_loss=n_loss/batch_idx
-    logging.info("Started Testing")
-    logging.info(" Test Loss"+str(avg_loss)+"Test Perplexity "+str(math.exp(avg_loss)))    
+    logger.info("Started Testing")
+    logger.info(" Test Loss"+str(avg_loss)+"Test Perplexity "+str(math.exp(avg_loss)))    
     # print(" Test Loss",str(avg_loss),"Test Perplexity ",str(math.exp(avg_loss)))
 
 if __name__=="__main__":
-    
+
     configsetters()
     mod()
