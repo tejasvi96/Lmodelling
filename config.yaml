@@ -1,0 +1,23 @@
+# db:
+#   driver: mysql
+#   user: omry
+#   pass: secret
+#   in_channels: 1
+#   kernel_size: 3
+
+main:
+  run_name: "Modelling"
+  max_seq_len: 50
+  batch_size: 64
+  hid_size: 1280
+  vocab_size: 200000
+  preprocessed: 1
+  files_dir: "/Users/stejasv/pyenv/"
+  train_file: "opensub_de.txt"
+  test_file: "opensub_de.txt"
+  val_file: "opensub_de.txt"
+  epochs: 1
+  learning_rate: 0.001
+  pretrained_model: "xlm-mlm-17-1280"
+  load_model: 0
+  load_model_file: "Modelling_model_0.pt"
