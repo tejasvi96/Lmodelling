@@ -6,18 +6,31 @@
 #   kernel_size: 3
 
 main:
-  run_name: "Modelling"
-  max_seq_len: 50
-  batch_size: 64
+  run_name: "Modelling_open_combined"
+  max_seq_len: 30
+  batch_size: 1
   hid_size: 1280
   vocab_size: 200000
-  preprocessed: 1
+  preprocessed: 0
   files_dir: "/Users/stejasv/pyenv/"
   train_file: "opensub_de.txt"
   test_file: "opensub_de.txt"
   val_file: "opensub_de.txt"
-  epochs: 1
-  learning_rate: 0.001
+  load_tsv: 0
+  epochs: 10
+  steps_for_validation: 10000
+  learning_rate: 0.0003
+  min_learning_rate: 0.000001
+  weight_decay_factor: 0.5
   pretrained_model: "xlm-mlm-17-1280"
   load_model: 0
-  load_model_file: "Modelling_model_0.pt"
+  load_model_file: "/Users/stejasv/pyenv/Modelling_open_combined/model_best.pt"
+  load_optim_file: "/Users/stejasv/pyenv/Modelling_source_data/optim_1.pth"
+  val_factor: 0.2
+  data_as_stream: 1
+  dropout: 0.2
+  do_training: 1
+  do_eval: 1
+  cuda: 1
+  vocab_file: "/Users/stejasv/pyenv/Modelling_open_combined/vocab_opensub_de.txt"
+  num_lstm_layers: 1
