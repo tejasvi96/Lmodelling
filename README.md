@@ -5,7 +5,7 @@
 In this project we consider the problem of unsupervised quality estimation in subtitles where we evaluate the sentences on the fluency aspect. The fluency aspect basically means that how likely a human is to write such a sentence. This project takes motivation from [here](https://www.aclweb.org/anthology/2020.tacl-1.35.pdf)
 
 e.g 
-1) He is eating cake 
+1) He is eating cake. 
 2) He cake eating is.
 
 Score(1) > Score(2) because its composed of more meaningful units and is grammatrically correct in the order of words.
@@ -22,7 +22,7 @@ e.g
 
 
 
-Perplexity(1)<Perplexity(2) , This is because the word chocolate is more statistically significant and more likely to occur in the training corpus. Thus it is given a higher perplexity score by the model. But on the fluency aspect both these sentences are similar and thus to arrive at a common score across different words we need to ormalize the perplexity score by decreasing the unigram probabilities of each word to eliminate the effect of statistical significance. This motivation is adapted from [here](https://arxiv.org/abs/1809.08731).
+Perplexity(1)<Perplexity(2) , This is because the word chocolate is more statistically significant and more likely to occur in the training corpus. Thus sentence 1 has a higher probability of occurence which in turn means lesser perplexity scores. But on the fluency aspect both these sentences are similar and thus to arrive at a common score across different words we need to normalize the perplexity score by decreasing the unigram probabilities of each word to eliminate the effect of statistical significance. This motivation is adapted from [here](https://arxiv.org/abs/1809.08731).
 
 
 # Experiment
