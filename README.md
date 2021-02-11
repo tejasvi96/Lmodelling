@@ -24,6 +24,22 @@ e.g
 
 Perplexity(1)<Perplexity(2) , This is because the word chocolate is more statistically significant and more likely to occur in the training corpus. Thus sentence 1 has a higher probability of occurence which in turn means lesser perplexity scores. But on the fluency aspect both these sentences are similar and thus to arrive at a common score across different words we need to normalize the perplexity score by decreasing the unigram probabilities of each word to eliminate the effect of statistical significance. This motivation is adapted from [here](https://arxiv.org/abs/1809.08731).
 
+# Model 
+
+We make use of the pretrained  XLM models and try to build an encoder on top of it for the efficient translation using the context based transformer models A raw input sentence is taken and fed to the XLM module which uses a positional embedding which maps the entire sequence , specifically its corresponding tokens to an embedding
+space. The embedding space is pretrained and if a token is present then it assigns the corresponding index and if not then assigns it the unk token. The embedder is basically a
+table which stores all the words present in the corpus and their corresponding high dimensional representations. This is passed through the Encoder module which is composed
+of different attention heads. Each encoder applies self attention to each of the word and combines the input with the self attention and pass this to the feed forward network on which again a normalization layer is applied which passes the context to the next encoder. Proceeding in this way all the encoder states are stored and concatenated and passed to the initial state of the decoder module as the context. The decoder also applies the similar operations and makes use of the context and positional encoding to generate a sequence or final high dimensional output which can be used based on the task at hand. On top of the XLM we add a Bi LSTM layer which uses bidirectionalism through a forward
+and a backward layer to produce the final output of size same as the input hidden dimension. This is fed through a linear fully connected layer which produces the outputs as probabilities over the entire vocabulary.
+
+Architecture of a standard Transformer Model.
+
+![Images.](https://github.com/tejasvi96/Lmodelling/blob/master/Transformer_architecture.png?raw=True)
+
+
+Architecture of the language model that we use
+
+![Images.](https://github.com/tejasvi96/Lmodelling/blob/master/Language_model.png?raw=True)
 
 # Experiment
 
